@@ -95,7 +95,6 @@ class MidiProcessor(object):
 			prevTick = 0
 			tubs = ""
 			prevDiff = 0
-			siameseBeats = 0    # beats so close to eachother that, when TUBSing it, they try to occupy the same TUB.
 			# Deve-se preencher espaços vazios apenas nos timeslots que não sejam utilizados por batidas. Por exemplo,
 			# se temos batidas nos tempos 4 e 7 do sistema TUBS, devemos preencher com [7 - (4+1)] = 2 batidas, pois os
 			# tempos 4 e 7 já estão reservados, sobrando os tempos 5 e 6 para preencher com espaços vazios.
@@ -106,28 +105,24 @@ class MidiProcessor(object):
 				#	 tubs += "|"
 				#	 barCounter += 1
 
-				for _ in range(tubsPrevTick + 1 + siameseBeats, tubsTick):
-				#if tubsTick - (tubsPrevTick + 1) > 0:
+				for _ in range(tubsPrevTick + 1, tubsTick):
 					tubs += "."
-					siameseBeats = 0
 
-				# <editor-fold desc="Old code to debug timelines with different lengths.">
-				if instrumentID == '40':
-					print "Len: " + str(len(tubs) + 1) + " | Pos (Tick): " + str(self.getTubsPlacement(tick))
 				diff = len(tubs) + 1 - self.getTubsPlacement(tick)
-				if len(tubs) + 1 > self.getTubsPlacement(tick) and not diff == prevDiff and tick > 0:
-					print "HERE! Diff: " + str(diff)
-					siameseBeats += 1
+				#if not tubsPrevTick == tubsTick and not len(tubs) + 1 == self.getTubsPlacement(tick) and not diff == prevDiff and tick > 0:
+				if tubsPrevTick == tubsTick and tick > 0:
+					#print "HERE \/! Diff: " + str(diff)
 					prevDiff = diff
-					tubs += "|"
+					#tubs += "|"
 					#tubs += "X"
-
+				elif tick == 0:
+					tubs += "X"
 				else:
 					#print ""
 					tubs += "X"
-				#else:
-				# </editor-fold>
-				#	tubs += "X"
+
+				#if instrumentID == '42':
+				#	print "Len: " + str(len(tubs)) + " | Pos (Tick): " + str(self.getTubsPlacement(tick))
 
 				if tick == 0:
 					prevTick = tick + 1
@@ -138,7 +133,10 @@ class MidiProcessor(object):
 			#  não é necessário o lembrete de cima, com relação à subtração de 1 do valor, porque o valor de
 			# maxTrackLength é o último slot a ser preenchido, não a próxima batida.
 			if self.getTubsPlacement(prevTick) < self.getTubsPlacement(self.maxTrackLength):
-				for t in range(self.getTubsPlacement(prevTick + 1) + siameseBeats, self.getTubsPlacement(self.maxTrackLength + 1)):
+				#if instrumentID == '42':
+				print "prev: " + str(self.getTubsPlacement(prevTick + 1)) + " | " + "prev + 1: " + str(self.getTubsPlacement(prevTick) + 1) \
+							+ " | max: " + str(self.getTubsPlacement(self.maxTrackLength + 1)) + " | max + 1: " + str(self.getTubsPlacement(self.maxTrackLength) + 1)
+				for t in range(self.getTubsPlacement(prevTick) + 1, self.getTubsPlacement(self.maxTrackLength) + 1):
 					tubs += "."
 
 			print tubs + "\t" + str(self.getTubsPlacement(prevTick)) + "-" + str(self.getTubsPlacement(self.maxTrackLength)),
