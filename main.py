@@ -3,26 +3,25 @@
 __author__ = 'Luca'
 
 import MidiProcessor
-from os import walk
+from time import localtime, strftime
+import os
+
+windows_url = "C:\\Users\\Luca\\PycharmProjects\\Testing\\MIDIs"
+linux_url = ""
 
 if __name__ == '__main__':
-	dirs = []
-	files = []
-	for (dirpath, dirnames, filenames) in walk("C:\\Users\\Luca\\PycharmProjects\\Testing"):
-		if dirpath.find("MIDI") != -1:
-			print dirpath
-		if dirnames.find("MIDI") != -1:
-			dirs.extend(dirnames)
-		if filenames.find(".MID") != -1 or filenames.find(".mid") != -1:
-			files.extend(filenames)
+	runtime = strftime("%Y_%m_%d___%H_%M_%S", localtime())
+	with open(runtime + ".txt", 'a') as f:
+			f.write("Filename\t\tMaxTrack\tNumInst\t\tTimeSig\t\tTPB\n")
 
-	print len(files)
-	for single_file in files:
-		print single_file
+	for (dirpath, dirnames, filenames) in os.walk(windows_url):
+		for name in filenames:
+			#print "File: " + name
+			processor = MidiProcessor.MidiProcessor(os.path.join(dirpath + "\\" + name), name, runtime)
+			processor.processTracks()
+			processor.setup_variables()
+			processor.beatsByInstrument()
+			processor.createTimelines()
+			processor.writeResultsToFile()
 
-
-	# processor = MidiProcessor.MidiProcessor('C:\\Users\\Luca\\Downloads\\MIDIs\\Brazilian\\AFOXE.MID')
-	# processor.processTracks()
-	# processor.setup_variables()
-	# processor.beatsByInstrument()
-	# processor.createTimelines()
+	# TODO: Divide in bars, check time signature data, do coincidences algorithm

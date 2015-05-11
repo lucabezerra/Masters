@@ -7,17 +7,21 @@ from mido import midifiles
 from collections import OrderedDict
 import math
 import PercussionDevicesEnum
+from time import gmtime, strftime, localtime
 
-mid = None
-beats = {}
-instruments = {}
-orderedBeats = {}
-numerator = denominator = 4
-tempo = absoluteTimeCounter = ticksPerBeat = maxTrackLength = barSize = barCounter = 0
+# mid = None
+# fileName = ""
+# beats = {}
+# instruments = {}
+# orderedBeats = {}
+# numerator = denominator = 4
+# tempo = absoluteTimeCounter = ticksPerBeat = maxTrackLength = barSize = barCounter = 0
 
 class MidiProcessor(object):
-	def __init__(self, midi_file_path):
+	def __init__(self, midi_file_path, file_name, runtime):
 		self.mid = mido.midifiles.MidiFile(midi_file_path)
+		self.fileName = file_name
+		self.runtime = runtime
 		self.ticksPerBeat = self.mid.ticks_per_beat
 		#self.mid.print_tracks()
 		####
@@ -59,12 +63,11 @@ class MidiProcessor(object):
 				self.maxTrackLength = self.absoluteTimeCounter
 
 	def setup_variables(self):
-		#print "TS: " + str(self.numerator) + "/" + str(self.denominator) + "(" + str(self.barSize) + ")"
-		#print "T: " + str(self.tempo) + " | BPM: " + str(self.bpm) + " | TPB: " + str(self.ticksPerBeat)
-
 		self.orderedBeats = OrderedDict(sorted(self.beats.items()))  # Python's dictionaries are not ordered.
 		#self.barSize = getTubsPlacement(self.ticksPerBeat) * self.denominator
 		#self.barCounter = 0
+		#print "TS: " + str(self.numerator) + "/" + str(self.denominator) + "(" + str(self.barSize) + ")"
+		#print "T: " + str(self.tempo) + " | BPM: " + str(self.bpm) + " | TPB: " + str(self.ticksPerBeat)
 
 	def beatsByInstrument(self):
 		for absBeatTime, instrumentsList in self.orderedBeats.iteritems():
@@ -89,9 +92,9 @@ class MidiProcessor(object):
 	# aconteceu um ataque de nota. Para transformar na notação TUBS, é preciso preencher as
 	# diferenças de tempo entre cada ataque com espaços vazios (ou pontos, na notação textual).
 	def createTimelines(self):
-		print "\nINSTRUMENTOS:"
+		#print "\nINSTRUMENTOS:"
 		for instrumentID, beatsTicks in self.instruments.iteritems():
-			self.printInstrumentName(instrumentID)
+			#self.printInstrumentName(instrumentID)
 			prevTick = 0
 			tubs = ""
 			prevDiff = 0
@@ -115,10 +118,7 @@ class MidiProcessor(object):
 					prevDiff = diff
 					#tubs += "|"
 					#tubs += "X"
-				elif tick == 0:
-					tubs += "X"
 				else:
-					#print ""
 					tubs += "X"
 
 				#if instrumentID == '42':
@@ -133,18 +133,24 @@ class MidiProcessor(object):
 			#  não é necessário o lembrete de cima, com relação à subtração de 1 do valor, porque o valor de
 			# maxTrackLength é o último slot a ser preenchido, não a próxima batida.
 			if self.getTubsPlacement(prevTick) < self.getTubsPlacement(self.maxTrackLength):
-				#if instrumentID == '42':
-				print "prev: " + str(self.getTubsPlacement(prevTick + 1)) + " | " + "prev + 1: " + str(self.getTubsPlacement(prevTick) + 1) \
-							+ " | max: " + str(self.getTubsPlacement(self.maxTrackLength + 1)) + " | max + 1: " + str(self.getTubsPlacement(self.maxTrackLength) + 1)
 				for t in range(self.getTubsPlacement(prevTick) + 1, self.getTubsPlacement(self.maxTrackLength) + 1):
 					tubs += "."
 
-			print tubs + "\t" + str(self.getTubsPlacement(prevTick)) + "-" + str(self.getTubsPlacement(self.maxTrackLength)),
-			print "[Length: " + str(len(tubs)) + "] " #+ str(dots) + " )( " + str(exes),
+			#print tubs + "\t" + str(self.getTubsPlacement(prevTick)) + "-" + str(self.getTubsPlacement(self.maxTrackLength)),
+			#print "[Length: " + str(len(tubs)) + "]"
 
-		#for beatTime, instList in self.orderedBeats.iteritems():
-		#	print str(len(instList)) + ": [",
-		#	for inst in instList:
-		#		print str(self.printInstrumentName(inst.note)) + ", ",
-		#	print "]"
-		#print ""
+			if len(tubs) != self.getTubsPlacement(self.maxTrackLength):
+				print "**************** Problem on timeline length: " + self.mid.filename + " -->",
+				str(self.printInstrumentName(instrumentID))
+			elif len(self.instruments) < 2:
+				print "**************** Less than 2 instruments: " + self.mid.filename + " -->" +\
+				str(len(self.instruments))
+
+
+	def writeResultsToFile(self):
+		line = self.fileName + "\t\t" + str(self.maxTrackLength) + "\t\t" + str(len(self.instruments)) + \
+		       "\t\t" + str(self.numerator) + "/" + str(self.denominator) + "\t\t" + str(self.ticksPerBeat) + "\n"
+
+		with open(self.runtime + ".txt", 'a') as f:
+			f.write(line)
+
