@@ -1,7 +1,3 @@
-# coding=utf-8
-
-__author__ = 'Luca'
-
 import os
 from time import localtime, strftime
 from collections import OrderedDict
@@ -11,10 +7,13 @@ import numpy as np
 
 import MidiProcessor
 
+# coding=utf-8
+
+__author__ = 'Luca'
+
 
 class PlotGenerator():
-    WINDOWS_DIRPATH = "C:\\Users\\Luca\\PycharmProjects\\Testing\\MIDIs"
-    LINUX_DIRPATH = ""
+    DIRPATH = "MIDIs"
     FILE_EXTENSION = ".MID"
 
     def __init__(self):
@@ -31,7 +30,7 @@ class PlotGenerator():
         amount_of_means_by_num_insts['am'] = dict()
         amount_of_means_by_num_insts['bm'] = dict()
 
-        for (dirpath, dirnames, filenames) in os.walk(self.WINDOWS_DIRPATH):
+        for (dirpath, dirnames, filenames) in os.walk(self.DIRPATH):
             for name in filenames:
                 # remove the second condition on this IF to include drum samples
                 if str(name).upper().find(self.FILE_EXTENSION) != -1:  # and dirpath.find("Drum_Loops") == -1:

@@ -1,18 +1,18 @@
-# coding=utf-8
-
-__author__ = 'Luca'
-
 import math
 from collections import OrderedDict
 import mido
 from mido import midifiles
 import PercussionDevicesEnum
 
+# coding=utf-8
+
+__author__ = 'Luca'
+
 
 class MidiProcessor(object):
-    '''
+    """
         Class that performs the whole MIDI processing.
-    '''
+    """
 
     def __init__(self, midi_file_path, filename, runtime, print_instruments_data=False,
                  generate_image_files=False, only_two_instruments=False, filter_by_timber=False):
@@ -37,7 +37,7 @@ class MidiProcessor(object):
         for i, track in enumerate(self.mid.tracks):
             self.absolute_time_counter = 0
             for j, message in enumerate(track):
-                # not only note_on messages have times greater than zero
+                # not only 'note_on' messages have times greater than zero
                 self.absolute_time_counter += message.time
                 if message.type == 'note_on':
                     if message.velocity > 0 and message.channel == 9:
@@ -135,10 +135,10 @@ class MidiProcessor(object):
         return int(math.ceil(float(attack_time) / (float(self.ticks_per_beat) / 12.0)))
 
     def create_timelines(self):
-        # "instruments" é um dicionário onde, para cada elemento, a chave é o nome do instrumento,
-        # e o valor é uma lista de inteiros, onde cada elemento representa o tempo, em ticks, onde
-        # aconteceu um ataque de nota. Para transformar na notação TUBS, é preciso preencher as
-        # diferenças de tempo entre cada ataque com espaços vazios (ou pontos, na notação textual).
+        # "instruments" is a dictionary where, for each element, the key is the instrument's name and
+        # the value is a list of integers. In this list, each element represents the exact time, in ticks,
+        # when an attack (note) happened. In order to transform it into the TUBS notation, we must
+        # first fill the time differences between them with empty spaces (or dots, in the text notation).
         if self.print_instruments_data:
             print "\nINSTRUMENTOS:"
         for instrument_id, beats_ticks in self.instruments.iteritems():
@@ -146,9 +146,9 @@ class MidiProcessor(object):
                 self.print_instrument_name(instrument_id)
             prev_tick = 0
             tubs = ""
-            # Deve-se preencher espaços vazios apenas nos timeslots que não sejam utilizados por batidas. Por exemplo,
-            # se temos batidas nos tempos 4 e 7 do sistema TUBS, devemos preencher com [7 - (4+1)] = 2 batidas, pois os
-            # tempos 4 e 7 já estão reservados, sobrando os tempos 5 e 6 para preencher com espaços vazios.
+            # The empty spaces should only be filled in the timeslots that aren't filled by beats already. For instance,
+            # if there are beats on timeslots 4 and 7 of the TUBS system, we should fill with [7 - (4+1)] = 2 beats,
+            # because the timeslots 4 and 7 are already taken, leaving the timeslots 5 and 6 available to be filled.
             for tick in beats_ticks:
                 tubs_tick = self.get_tubs_placement(tick)
                 tubs_prev_tick = self.get_tubs_placement(prev_tick)
@@ -166,8 +166,8 @@ class MidiProcessor(object):
                 else:
                     prev_tick = tick
 
-            # Preenchendo os últimos slots do TUBS, caso a última batida não tenha sido
-            # no último tempo da música.
+            # filling the last TUBS timeslots, in case the last beat hasn't occurred in the song's
+            # last available timeslot
             if self.get_tubs_placement(prev_tick) < self.get_tubs_placement(self.max_track_length):
                 for t in range(self.get_tubs_placement(prev_tick) + 1,
                                self.get_tubs_placement(self.max_track_length) + 1):
@@ -183,12 +183,10 @@ class MidiProcessor(object):
 
         return ""
 
-
     def format_results_for_file_writing(self):
         return self.filename + "\t\t" + str(self.max_track_length) + "\t\t" + \
                str(len(self.instruments)) + "\t\t" + str(self.numerator) + "/" + \
                str(self.denominator) + "\t\t" + str(self.ticks_per_beat) + "\n"
-
 
     def normalize_array(self, original_array):
         return_array = []
