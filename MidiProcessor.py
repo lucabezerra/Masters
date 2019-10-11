@@ -2,7 +2,9 @@ import math
 from collections import OrderedDict
 import mido
 from mido import midifiles
-import PercussionDevicesEnum
+
+from helpers import get_timber_group
+from percussion_devices import PercussionDevicesEnum
 
 # coding=utf-8
 
@@ -14,64 +16,59 @@ class MidiProcessor(object):
         Class that performs the whole MIDI processing.
     """
 
-    def __init__(self, midi_file_path, filename, runtime, print_instruments_data=False,
+    def __init__(self, midi_file_path, runtime, print_instruments_data=False,
                  generate_image_files=False, only_two_instruments=False, filter_by_timber=False):
         self.mid = mido.midifiles.MidiFile(midi_file_path)
-        self.filename = filename
+        self.filename = midi_file_path.split('/')[-1]
         self.runtime = runtime
         self.ticks_per_beat = self.mid.ticks_per_beat
         # self.mid.print_tracks()
         self.beats = {}
         self.instruments = {}
         self.ordered_beats = {}
-        self.numerator = self.denominator = 4
-        self.tempo, self.absolute_time_counter, self.max_track_length, \
-        self.bar_size, self.bar_counter, self.bpm = 0, 0, 0, 0, 0, 0
+        self.numerator, self.denominator = 4, 4
+        self.tempo, self.abs_time_counter, self.max_track_len = 0, 0, 0
+        self.bar_size, self.bar_counter, self.bpm = 0, 0, 0
         self.print_instruments_data = print_instruments_data
         self.generate_image_files = generate_image_files
         self.only_two_instruments = only_two_instruments
         self.filter_by_timber = filter_by_timber
-        self.percussion_devices = PercussionDevicesEnum.PercussionDevices()
 
     def process_tracks(self):
         for i, track in enumerate(self.mid.tracks):
-            self.absolute_time_counter = 0
+            self.abs_time_counter = 0
             for j, message in enumerate(track):
                 # not only 'note_on' messages have times greater than zero
-                self.absolute_time_counter += message.time
+                self.abs_time_counter += message.time
                 if message.type == 'note_on':
                     if message.velocity > 0 and message.channel == 9:
                         # The same absolute time might have beats from
                         # multiple instruments. Therefore, a list is required.
-                        if self.absolute_time_counter not in self.beats:
-                            self.beats[self.absolute_time_counter] = []
-                            self.beats[self.absolute_time_counter].append(message)
+                        if self.abs_time_counter not in self.beats:
+                            self.beats[self.abs_time_counter] = [message]
                         else:
                             has_note = False
-                            # Check if there are no other messages from the same instrument at that
-                            # same time before inserting
-                            for entry in self.beats[self.absolute_time_counter]:
+                            # Check if there are no other messages from the same 
+                            # instrument at that same time before inserting
+                            for entry in self.beats[self.abs_time_counter]:
                                 if entry.note == message.note:
                                     has_note = True
                             if not has_note:
-                                self.beats[self.absolute_time_counter].append(message)
+                                self.beats[self.abs_time_counter].append(message)
                 elif message.type == 'set_tempo':
                     self.tempo = message.tempo
                     self.bpm = (1000000 / self.tempo) * 60
                 elif message.type == 'time_signature':
                     self.numerator = message.numerator
                     self.denominator = message.denominator
-                elif message.type == 'text':
-                    pass
-            if self.absolute_time_counter > self.max_track_length:
-                self.max_track_length = self.absolute_time_counter
+            if self.abs_time_counter > self.max_track_len:
+                self.max_track_len = self.abs_time_counter
 
     def setup_variables(self):
-        # Python's dictionaries are unordered.
         self.ordered_beats = OrderedDict(sorted(self.beats.items()))
 
     def beats_by_instrument(self):
-        for abs_beat_time, instruments_list in self.ordered_beats.iteritems():
+        for abs_beat_time, instruments_list in self.ordered_beats.items():
             for single_instrument in instruments_list:
                 instrument_name = str(single_instrument.note)
                 if instrument_name not in self.instruments:
@@ -86,10 +83,10 @@ class MidiProcessor(object):
         means = []
 
         if len(self.instruments) < 2:
-            print "LESS THAN 2 INSTRUMENTS:", self.mid.filename
+            print(f"LESS THAN 2 INSTRUMENTS: {self.mid.filename}")
 
         # gets the list of instruments that played at each beat
-        for beat, inst_list in self.ordered_beats.iteritems():
+        for beat, inst_list in self.ordered_beats.items():
             # checks and sets the max and min instruments found
             if len(inst_list) > max_instruments_at_once: max_instruments_at_once = len(inst_list)
             if len(inst_list) < min_instruments_at_once: min_instruments_at_once = len(inst_list)
@@ -101,7 +98,7 @@ class MidiProcessor(object):
             if not self.filter_by_timber:
                 inst_sum += len(inst_list)
             else:
-                inst_sum += self.percussion_devices.get_timber_group(inst_list)
+                inst_sum += get_timber_group(inst_list)
 
         # The Arithmetic Mean (sum of instruments from all beats divided by the amount of beats)
         arith_mean = float(inst_sum) / float(len(self.ordered_beats))
@@ -126,29 +123,32 @@ class MidiProcessor(object):
         return means
 
     def print_instrument_name(self, inst_id):
-        if int(inst_id) >= 33 and int(inst_id) <= 81:
-            print self.percussion_devices.PercussionDevicesDict[int(inst_id)]
+        inst_id = int(inst_id)
+        if 33 < inst_id <= 81:
+            print(PercussionDevicesEnum(inst_id))
         else:
-            print inst_id
+            print(inst_id)
 
     def get_tubs_placement(self, attack_time):
         return int(math.ceil(float(attack_time) / (float(self.ticks_per_beat) / 12.0)))
 
     def create_timelines(self):
-        # "instruments" is a dictionary where, for each element, the key is the instrument's name and
-        # the value is a list of integers. In this list, each element represents the exact time, in ticks,
-        # when an attack (note) happened. In order to transform it into the TUBS notation, we must
-        # first fill the time differences between them with empty spaces (or dots, in the text notation).
+        # "instruments" is a dictionary where, for each element, the key is the instrument's name
+        # and the value is a list of integers. In this list, each element represents the exact time,
+        # in ticks, when an attack (note) happened. In order to transform it into the TUBS notation,
+        # we must first fill the time differences between them with empty spaces (or dots, in the
+        # text notation).
         if self.print_instruments_data:
-            print "\nINSTRUMENTOS:"
-        for instrument_id, beats_ticks in self.instruments.iteritems():
+            print("\nINSTRUMENTOS:")
+        for instrument_id, beats_ticks in self.instruments.items():
             if self.print_instruments_data and len():
                 self.print_instrument_name(instrument_id)
             prev_tick = 0
             tubs = ""
-            # The empty spaces should only be filled in the timeslots that aren't filled by beats already. For instance,
-            # if there are beats on timeslots 4 and 7 of the TUBS system, we should fill with [7 - (4+1)] = 2 beats,
-            # because the timeslots 4 and 7 are already taken, leaving the timeslots 5 and 6 available to be filled.
+            # The empty spaces should only be filled in the timeslots that aren't filled by beats
+            # already. For instance, if there are beats on timeslots 4 and 7 of the TUBS system,
+            # we should fill with [7 - (4+1)] = 2 beats, because the timeslots 4 and 7 are already
+            # taken, leaving the timeslots 5 and 6 available to be filled.
             for tick in beats_ticks:
                 tubs_tick = self.get_tubs_placement(tick)
                 tubs_prev_tick = self.get_tubs_placement(prev_tick)
@@ -166,25 +166,26 @@ class MidiProcessor(object):
                 else:
                     prev_tick = tick
 
-            # filling the last TUBS timeslots, in case the last beat hasn't occurred in the song's
-            # last available timeslot
-            if self.get_tubs_placement(prev_tick) < self.get_tubs_placement(self.max_track_length):
+            # filling the last TUBS timeslots, in case the last beat hasn't
+            # occurred in the song's last available timeslot
+            if self.get_tubs_placement(prev_tick) < self.get_tubs_placement(self.max_track_len):
                 for t in range(self.get_tubs_placement(prev_tick) + 1,
-                               self.get_tubs_placement(self.max_track_length) + 1):
+                               self.get_tubs_placement(self.max_track_len) + 1):
                     tubs += "."
 
             if self.print_instruments_data:
-                print tubs + "\t" + str(self.get_tubs_placement(prev_tick)) + "-" + \
-                      str(self.get_tubs_placement(self.max_track_length)),
-                print "[Length: " + str(len(tubs)) + "]"
+                print(f"{tubs}\t{self.get_tubs_placement(prev_tick)}-"
+                      f"{self.get_tubs_placement(self.max_track_len)}"),
+                print(f"[Length: {len(tubs)}]")
 
+        means = []
         if self.generate_image_files:
-            return self.count_instruments_by_beat()
+            means = self.count_instruments_by_beat()
 
-        return ""
+        return means
 
     def format_results_for_file_writing(self):
-        return self.filename + "\t\t" + str(self.max_track_length) + "\t\t" + \
+        return self.filename + "\t\t" + str(self.max_track_len) + "\t\t" + \
                str(len(self.instruments)) + "\t\t" + str(self.numerator) + "/" + \
                str(self.denominator) + "\t\t" + str(self.ticks_per_beat) + "\n"
 
@@ -227,14 +228,18 @@ if __name__ == '__main__':
     parser.add_argument('-file', '-f', type=str, help='the file path')
 
     args = parser.parse_args()
-    print "Begin: " + str(strftime("%Y_%m_%d___%H_%M_%S", localtime()))
-    processor = MidiProcessor(args.file, args.file.split('\\')[-1],
+    print(f"Begin: {strftime('%Y_%m_%d___%H_%M_%S', localtime())}")
+    processor = MidiProcessor(args.file, args.file.split('/')[-1],
                               strftime("%Y_%m_%d___%H_%M_%S", localtime()),
                               print_instruments_data=True, generate_image_files=True,
                               only_two_instruments=False, filter_by_timber=False)
     processor.process_tracks()
-    processor.setup_variables()
-    processor.beats_by_instrument()
-    means = processor.create_timelines()
-    processor.format_results_for_file_writing()
-    print "End: " + str(strftime("%Y_%m_%d___%H_%M_%S", localtime()))
+    if len(list(processor.beats)) > 0:
+        processor.setup_variables()
+        processor.beats_by_instrument()
+        processor.create_timelines()
+        processor.format_results_for_file_writing()
+    else:
+        print(f"Found no beats on file {args.file}.")
+        
+    print(f"End: {strftime('%Y_%m_%d___%H_%M_%S', localtime())}")
