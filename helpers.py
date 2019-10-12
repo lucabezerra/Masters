@@ -94,8 +94,56 @@ def write_to_file(start_runtime, contents, write_mode='a'):
         f.write(contents)
 
 
-def get_timber_group(self, inst_list):
+def normalize_array(original_array):
+    if not original_array or len(original_array) <= 1:
+        return []
+    return_array = []
+    max_value = max(original_array)
+    min_value = min(original_array)
+    normalized_max = 1.0
+    normalized_min = -1.0
+    normalized_range = normalized_max - normalized_min
 
+    # to avoid a ZeroDivisionError below, we deal with this special case
+    if max_value == min_value:
+        return [normalized_min for _ in range(len(original_array))]
+
+    # lambda function for transposing the original values to the normalized ones through a
+    # linear function calculation
+    # y = ax + b -> normalized_value = (a * original_value) + b
+    a = -normalized_range / float(min_value - max_value)
+    b = normalized_max - (a * max_value)
+    converter = lambda x: (a * x) + b
+
+    for item in original_array:
+        return_array.append(converter(item))
+
+    return return_array
+
+
+def plot_individual_means(ordered_means):
+    tmp_dict = {}
+    for key, array in ordered_means['am'].items():
+        am_overall_normed_means = []
+        if len(array) > 1:
+            tmp_dict[key] = []
+            for i in normalize_array(array):                
+                am_overall_normed_means.append(i)
+                tmp_dict[key].append(i)
+
+            fig = plt.figure(figsize=(8, 3))
+            helpers.plot_data(am_overall_normed_means, key)
+
+    ordered_means_by_inst = OrderedDict()
+    for k, v in tmp_dict.items():
+        ordered_means_by_inst[k] = sorted(v)
+    plot_color_gradients(len(ordered_means_by_inst), ordered_means_by_inst, 'Greys')
+
+
+def get_timber_group(self, inst_list):
+    """
+    TODO: Separate instruments by timber so this method can work.
+    """
     HighTimberInstruments = {}
     MediumTimberInstruments = {}
     LowTimberInstruments = {}

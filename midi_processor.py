@@ -16,8 +16,7 @@ class MidiProcessor(object):
         Class that performs the whole MIDI processing.
     """
 
-    def __init__(self, midi_file_path, runtime, print_instruments_data=False,
-                 generate_image_files=False, only_two_instruments=False, filter_by_timber=False):
+    def __init__(self, midi_file_path, runtime):
         self.mid = mido.midifiles.MidiFile(midi_file_path)
         self.filename = midi_file_path.split('/')[-1]
         self.runtime = runtime
@@ -29,10 +28,6 @@ class MidiProcessor(object):
         self.numerator, self.denominator = 4, 4
         self.tempo, self.abs_time_counter, self.max_track_len = 0, 0, 0
         self.bar_size, self.bar_counter, self.bpm = 0, 0, 0
-        self.print_instruments_data = print_instruments_data
-        self.generate_image_files = generate_image_files
-        self.only_two_instruments = only_two_instruments
-        self.filter_by_timber = filter_by_timber
 
     def process_tracks(self):
         for i, track in enumerate(self.mid.tracks):
@@ -47,13 +42,12 @@ class MidiProcessor(object):
                         if self.abs_time_counter not in self.beats:
                             self.beats[self.abs_time_counter] = [message]
                         else:
-                            has_note = False
                             # Check if there are no other messages from the same 
                             # instrument at that same time before inserting
-                            for entry in self.beats[self.abs_time_counter]:
-                                if entry.note == message.note:
-                                    has_note = True
-                            if not has_note:
+                            notes = list(filter(
+                                lambda b: b.note == message.note, self.beats[self.abs_time_counter]
+                            ))
+                            if not len(notes):
                                 self.beats[self.abs_time_counter].append(message)
                 elif message.type == 'set_tempo':
                     self.tempo = message.tempo
@@ -88,36 +82,23 @@ class MidiProcessor(object):
         # gets the list of instruments that played at each beat
         for beat, inst_list in self.ordered_beats.items():
             # checks and sets the max and min instruments found
-            if len(inst_list) > max_instruments_at_once: max_instruments_at_once = len(inst_list)
-            if len(inst_list) < min_instruments_at_once: min_instruments_at_once = len(inst_list)
+            inst_count = len(inst_list)
+            if inst_count > max_instruments_at_once: max_instruments_at_once = inst_count
+            if inst_count < min_instruments_at_once: min_instruments_at_once = inst_count
 
-            if len(inst_list) >= 2:
+            if inst_count >= 2:
                 binary_sum += 1
 
-            # checks whether it should filter the coincidences by timber or not
-            if not self.filter_by_timber:
-                inst_sum += len(inst_list)
-            else:
-                inst_sum += get_timber_group(inst_list)
+            inst_sum += inst_count
 
         # The Arithmetic Mean (sum of instruments from all beats divided by the amount of beats)
         arith_mean = float(inst_sum) / float(len(self.ordered_beats))
-
-        return_data = ReturnData()
-        return_data.mean_type = 'am'
-        return_data.num_insts = len(self.instruments)
-        return_data.mean_value = arith_mean
-
+        return_data = ReturnData('am', len(self.instruments), arith_mean)
         means.append(return_data)
 
         # The Binary Mean (anything above 1 instrument counts as only 2 instruments)
         bin_mean = min_instruments_at_once + (float(binary_sum) / float(len(self.ordered_beats)))
-
-        return_data = ReturnData()
-        return_data.mean_type = 'bm'
-        return_data.num_insts = len(self.instruments)
-        return_data.mean_value = bin_mean
-
+        return_data = ReturnData('bm', len(self.instruments), bin_mean)
         means.append(return_data)
 
         return means
@@ -138,11 +119,9 @@ class MidiProcessor(object):
         # in ticks, when an attack (note) happened. In order to transform it into the TUBS notation,
         # we must first fill the time differences between them with empty spaces (or dots, in the
         # text notation).
-        if self.print_instruments_data:
-            print("\nINSTRUMENTOS:")
-        for instrument_id, beats_ticks in self.instruments.items():
-            if self.print_instruments_data and len():
-                self.print_instrument_name(instrument_id)
+        print("\nINSTRUMENTOS:")
+        for instrument_id, beats_ticks in self.instruments.items():            
+            self.print_instrument_name(instrument_id)
             prev_tick = 0
             tubs = ""
             # The empty spaces should only be filled in the timeslots that aren't filled by beats
@@ -173,51 +152,21 @@ class MidiProcessor(object):
                                self.get_tubs_placement(self.max_track_len) + 1):
                     tubs += "."
 
-            if self.print_instruments_data:
-                print(f"{tubs}\t{self.get_tubs_placement(prev_tick)}-"
-                      f"{self.get_tubs_placement(self.max_track_len)}"),
-                print(f"[Length: {len(tubs)}]")
-
-        means = []
-        if self.generate_image_files:
-            means = self.count_instruments_by_beat()
-
-        return means
+            print(f"{tubs}\t{self.get_tubs_placement(prev_tick)}-"
+                    f"{self.get_tubs_placement(self.max_track_len)}"),
+            print(f"[Length: {len(tubs)}]")
 
     def format_results_for_file_writing(self):
         return self.filename + "\t\t" + str(self.max_track_len) + "\t\t" + \
                str(len(self.instruments)) + "\t\t" + str(self.numerator) + "/" + \
                str(self.denominator) + "\t\t" + str(self.ticks_per_beat) + "\n"
 
-    def normalize_array(self, original_array):
-        return_array = []
-        max_value = max(original_array)
-        min_value = min(original_array)
-        normalized_max = 1.0
-        normalized_min = -1.0
-        normalized_range = normalized_max - normalized_min
 
-        # to avoid a ZeroDivisionError below, we deal with this special case
-        if max_value == min_value:
-            return [normalized_min for _ in range(len(original_array))]
-
-        # lambda function for transposing the original values to the normalized ones through a
-        # linear function calculation
-        # y = ax + b -> normalized_value = (a * original_value) + b
-        a = -normalized_range / float(min_value - max_value)
-        b = normalized_max - (a * max_value)
-        converter = lambda x: (a * x) + b
-
-        for item in original_array:
-            return_array.append(converter(item))
-
-        return return_array
-
-
-class ReturnData(object):
-    mean_type = ""
-    num_insts = 0
-    mean_value = 0.0
+class ReturnData():
+    def __init__(self, mean_type="", num_insts=0, mean_value=0.0):
+        self.mean_type = mean_type
+        self.num_insts = num_insts
+        self.mean_value = mean_value
 
 
 if __name__ == '__main__':
@@ -230,9 +179,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(f"Begin: {strftime('%Y_%m_%d___%H_%M_%S', localtime())}")
     processor = MidiProcessor(args.file, args.file.split('/')[-1],
-                              strftime("%Y_%m_%d___%H_%M_%S", localtime()),
-                              print_instruments_data=True, generate_image_files=True,
-                              only_two_instruments=False, filter_by_timber=False)
+                              strftime("%Y_%m_%d___%H_%M_%S", localtime()))
     processor.process_tracks()
     if len(list(processor.beats)) > 0:
         processor.setup_variables()
